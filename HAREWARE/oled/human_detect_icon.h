@@ -1,0 +1,25 @@
+#ifndef __HUMAN_DETECT_H
+#define __HUMAN_DETECT_H
+
+#define HUMAN_DETECT_ICON_W_AND_H 8
+
+const unsigned char human_detect_icon[][8] = {
+
+    {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00},/*"未命名文件",0*/
+
+    {0x08,0x88,0x4B,0x3F,0x3F,0x4B,0x88,0x08},/*"未命名文件",1*/
+
+};
+
+
+
+#endif
+
+
+
+
+
+
+
+
+

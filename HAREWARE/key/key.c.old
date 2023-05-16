@@ -1,0 +1,340 @@
+#include "key.h"
+
+menu_info_t main_menu_info;
+global_settings_t global_settings;
+
+float set_max_min_T_or_H_value[2][2] = {
+    {SET_MAX_TEMPRATURE_VALUE, SET_MIN_TEMPRATURE_VALUE}, 
+    {SET_MAX_HUMIDITY_VALUE, SET_MIN_HUMIDITY_VALUE}};
+const unsigned char direction_arr[4] = {DIRECTION_UP, DIRECTION_DOWN, DIRECTION_LEFT, DIRECTION_RIGHT};
+
+
+
+/**
+  * @brief  Initialize global setting struct.
+  * @retval None
+  */
+void global_settings_struct_init(void) {    
+    global_settings.oled_first_meun_info.is_in_first_menu_flag = 1;
+    global_settings.oled_first_meun_info.first_menu_location = OLED_SHOW_T_OR_H;
+    global_settings.oled_first_meun_info.change_T_or_H_number = -1;
+    global_settings.oled_first_meun_info.is_change_T_or_H_flag = 0;
+    global_settings.oled_first_meun_info.change_T_or_H = IS_TEMPERATURE;
+    global_settings.oled_first_meun_info.detect_value_change_flag = 0;
+    return;
+}
+
+
+void key_change_detect_value(unsigned char change_flag) {
+    global_settings.oled_first_meun_info.detect_value_change_flag = change_flag;
+    return;
+}
+
+/**
+  * @brief  Initialize key gpio.
+  * @retval None
+  */
+void key_gpio_init(void) {
+    GPIO_InitTypeDef GPIO_InitStructure;
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+    GPIO_InitStructure.GPIO_Pin = K1 | K2 | K3 | K4 | K5 | K6;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
+    GPIO_Init(GPIOB, &GPIO_InitStructure);
+
+    global_settings_struct_init();
+    return;
+} 
+
+
+/**
+  * @brief  Use key to change setted temprature or humidity.
+  * @retval None
+  */
+void key_change_T_or_H_data(void) {
+    unsigned char *change_flag = &global_settings.oled_first_meun_info.is_change_T_or_H_flag;
+    unsigned char change_T_or_H = global_settings.oled_first_meun_info.change_T_or_H;
+    unsigned char *change_detect_flag = &global_settings.oled_first_meun_info.detect_value_change_flag;
+    int *temp = &global_settings.oled_first_meun_info.change_T_or_H_number;
+    unsigned char max_value = set_max_min_T_or_H_value[change_T_or_H][0];
+    unsigned char min_value = set_max_min_T_or_H_value[change_T_or_H][1];
+    float temp_data = 0;
+
+    while(*change_flag) {
+        if(*change_detect_flag) {
+            oled_show_home_page(change_T_or_H, IS_CHARGE);
+            oled_change_T_or_H_tip(*temp, change_T_or_H, 0);
+            *change_detect_flag = 0;
+        }
+
+        
+        if(!GPIO_ReadInputDataBit(GPIOB, K6)) {
+            delay_ms(10);
+            if(!GPIO_ReadInputDataBit(GPIOB, K6)) { 
+                
+                if(*change_flag) {
+                    *change_flag = 0;
+                    *temp = -1;
+                    oled_show_set_T_or_H(change_T_or_H);
+                    oled_data_array_translate();
+                    oled_show_array_data();
+                }
+                
+                if(led_state()) led_turn_on();
+                else led_turn_off();
+            }
+            // delay_ms(200);
+            while(!GPIO_ReadInputDataBit(GPIOB, K6)) {
+                delay_ms(200);
+            }
+        }
+
+        if(*change_flag && !GPIO_ReadInputDataBit(GPIOB, K2)) {
+            delay_ms(10);
+            if(!GPIO_ReadInputDataBit(GPIOB, K2)) { 
+                
+                temp_data = get_T_or_H_set_data(change_T_or_H);
+                switch (*temp)  {
+                    case 0:
+                        if(temp_data >= 10) temp_data = temp_data + 10 > max_value ? max_value : temp_data + 10;
+                        else {
+                            temp_data = temp_data + 1 > max_value ? max_value : temp_data + 1;
+                            if(temp_data >= 10) *temp = 1;
+                        }
+                        break;
+                    case 1:
+                        if(temp_data >= 10) temp_data = temp_data + 1 > max_value ? max_value : temp_data + 1;
+                        break;
+                    case 2:
+                        if(temp_data < 10) temp_data = temp_data + 0.1 > max_value ? max_value : temp_data + 0.1;
+                        if(temp_data >= 10) *temp = 3;
+                        break;
+                    case 3:
+                        if(temp_data >= 10) temp_data = temp_data + 0.1 > max_value ? max_value : temp_data + 0.1;
+                    default:
+                        break;
+                }
+                set_T_or_H_set_data(temp_data, change_T_or_H);
+                oled_change_T_or_H_tip(*temp, change_T_or_H, 0);
+                // oled_show_set_T_or_H(change_T_or_H);
+                // if(led_state()) led_turn_on();
+                // else led_turn_off();
+            }
+            // delay_ms(200);
+            while(!GPIO_ReadInputDataBit(GPIOB, K2)) {
+                delay_ms(200);
+            }
+        }
+
+        if(*change_flag && !GPIO_ReadInputDataBit(GPIOB, K4)) {
+            delay_ms(10);
+            if(!GPIO_ReadInputDataBit(GPIOB, K4)) { 
+                
+                temp_data = get_T_or_H_set_data(change_T_or_H);
+                switch (*temp)  {
+                    case 0:
+                        if(temp_data >= 10) {
+                            temp_data = temp_data - 10 < min_value ? min_value : temp_data - 10;
+                            if(temp_data < 10) *temp = 0;
+                        }
+                        else temp_data = temp_data - 1 < min_value ? min_value : temp_data - 1;
+                        break;
+                    case 1:
+                        if(temp_data >= 10) {
+                            temp_data = temp_data - 1 < min_value ? min_value : temp_data - 1;
+                            if(temp_data < 10) *temp = 0;
+                        }
+                        break;
+                    case 2:
+                        if(temp_data < 10) {
+                            temp_data = temp_data - 0.1 < min_value ? min_value : temp_data - 0.1;
+                        }
+                        break;
+                    case 3:
+                        if(temp_data >= 10) {
+                            temp_data = temp_data - 0.1 < min_value ? min_value : temp_data - 0.1;
+                            if(temp_data < 10) *temp = 2;
+                        }
+                    default:
+                        break;
+                }
+                set_T_or_H_set_data(temp_data, change_T_or_H);
+                oled_change_T_or_H_tip(*temp, change_T_or_H, 0);;
+                // oled_show_set_T_or_H(change_T_or_H);
+                oled_data_array_translate();
+                oled_show_array_data();
+                
+                // if(led_state()) led_turn_on();
+                // else led_turn_off();
+            }
+            // delay_ms(200);
+            while(!GPIO_ReadInputDataBit(GPIOB, K4)) {
+                delay_ms(200);
+            }
+        }
+
+        if(*change_flag && !GPIO_ReadInputDataBit(GPIOB, K3)) {
+            delay_ms(10);
+            if(!GPIO_ReadInputDataBit(GPIOB, K3)) { 
+                
+                *temp = oled_change_T_or_H_tip(*temp, change_T_or_H, -1);
+                
+                if(led_state()) led_turn_on();
+                else led_turn_off();
+            }
+            // delay_ms(200);
+            while(!GPIO_ReadInputDataBit(GPIOB, K3)) {
+                delay_ms(200);
+            }
+        }
+
+        if(*change_flag && !GPIO_ReadInputDataBit(GPIOB, K5)) {
+            delay_ms(10);
+            if(!GPIO_ReadInputDataBit(GPIOB, K5)) { 
+                
+                *temp = oled_change_T_or_H_tip(*temp, change_T_or_H, 1);
+                
+                if(led_state()) led_turn_on();
+                else led_turn_off();
+            }
+            // delay_ms(200);
+            while(!GPIO_ReadInputDataBit(GPIOB, K5)) {
+                delay_ms(200);
+            }
+        }
+    }
+}
+
+/**
+  * @brief  Use key to handle events of key.
+  * @retval None
+  */
+void key_handle_first_menu(void) {
+    unsigned char *is_first_menu = &global_settings.oled_first_meun_info.is_in_first_menu_flag;
+    oled_first_menu_tiem_t *first_menu_item = &global_settings.oled_first_meun_info.first_menu_location;
+    unsigned char *swtich_T_or_H = &global_settings.oled_first_meun_info.change_T_or_H;
+    unsigned char *change_flag = &global_settings.oled_first_meun_info.is_change_T_or_H_flag;
+    unsigned char *change_detect_flag = &global_settings.oled_first_meun_info.detect_value_change_flag;
+    int *temp = &global_settings.oled_first_meun_info.change_T_or_H_number;
+
+    if(*change_detect_flag) {
+        oled_show_home_page(*swtich_T_or_H, IS_CHARGE);
+        *change_detect_flag = 0;
+    }
+
+    // make sure
+    if(!GPIO_ReadInputDataBit(GPIOB, K1)) {
+        delay_ms(10);
+        if(!GPIO_ReadInputDataBit(GPIOB, K1)) { 
+            if(*first_menu_item == OLED_SHOW_T_OR_H) {
+                if(!*change_flag) {
+                    *change_flag = 1;
+                    *temp = 0;
+                    oled_show_home_page(*swtich_T_or_H, IS_CHARGE);
+                    oled_change_T_or_H_tip(*temp, *swtich_T_or_H, 0);
+                    key_change_T_or_H_data();
+                }
+            }
+            
+            if(led_state()) led_turn_on();
+            else led_turn_off();
+        }
+        // delay_ms(200);
+        while(!GPIO_ReadInputDataBit(GPIOB, K1)) {
+            delay_ms(200);
+        }
+    }
+
+    // up
+    if(*is_first_menu && !GPIO_ReadInputDataBit(GPIOB, K2)) {
+        delay_ms(10);
+        if(!GPIO_ReadInputDataBit(GPIOB, K2)) { 
+            
+            if(*first_menu_item == OLED_SHOW_T_OR_H) {
+                *swtich_T_or_H = *swtich_T_or_H ? IS_TEMPERATURE : IS_HUMIDITY;
+
+                oled_show_T_or_H_title(*swtich_T_or_H);
+                oled_refresh_T_or_H(*swtich_T_or_H);
+                oled_animation(DIRECTION_UP);
+            }
+
+            if(*first_menu_item == OLED_SHOW_SETTING) {
+                oled_test_function();
+                oled_animation(DIRECTION_UP);
+            }
+            
+            // if(led_state()) led_turn_on();
+            // else led_turn_off();
+        }
+        while(!GPIO_ReadInputDataBit(GPIOB, K2)) {
+            delay_ms(200);
+        }
+    }
+
+    // down
+    if(*is_first_menu && !GPIO_ReadInputDataBit(GPIOB, K4)) {
+        delay_ms(10);
+        if(!GPIO_ReadInputDataBit(GPIOB, K4)) { 
+            if(*first_menu_item == OLED_SHOW_T_OR_H) {
+                *swtich_T_or_H = *swtich_T_or_H ? IS_TEMPERATURE : IS_HUMIDITY;
+
+                oled_show_T_or_H_title(*swtich_T_or_H);
+                oled_refresh_T_or_H(*swtich_T_or_H);
+                oled_animation(direction_arr[1]);
+            }
+            
+            
+            // if(led_state()) led_turn_on();
+            // else led_turn_off();
+        }
+        while(!GPIO_ReadInputDataBit(GPIOB, K4)) {
+            delay_ms(200);
+        }
+    }
+    
+    // change item
+    // left
+    if(*is_first_menu && !GPIO_ReadInputDataBit(GPIOB, K3)) {
+        delay_ms(10);
+        if(!GPIO_ReadInputDataBit(GPIOB, K3)) { 
+            if(*first_menu_item == OLED_SHOW_T_OR_H) {
+                *first_menu_item = OLED_SHOW_SETTING;
+            } else {
+                *first_menu_item += 1;
+            }           
+            oled_clear();
+            oled_show_first_menu_item(*first_menu_item);
+            oled_show_first_menu_icon(*first_menu_item);
+            oled_show_select_bar();
+            oled_animation(DIRECTION_LEFT);
+        }
+        while(!GPIO_ReadInputDataBit(GPIOB, K3)) {
+            delay_ms(200);
+        }
+    }
+
+    // change item
+    // right
+    if(*is_first_menu && !GPIO_ReadInputDataBit(GPIOB, K5)) {
+        delay_ms(10);
+        if(!GPIO_ReadInputDataBit(GPIOB, K5)) { 
+            if(*first_menu_item == OLED_SHOW_T_OR_H) {
+                *first_menu_item = OLED_SHOW_SLEEP;
+            } else {
+                if(*first_menu_item == OLED_SHOW_SETTING) {
+                    *first_menu_item = OLED_SHOW_T_OR_H;
+                } else {
+                    *first_menu_item -= 1;
+                }
+            }           
+            oled_clear();
+            oled_show_first_menu_item(*first_menu_item);
+            oled_show_first_menu_icon(*first_menu_item);
+            oled_show_select_bar();
+            oled_animation(DIRECTION_RIGHT);
+        }
+        while(!GPIO_ReadInputDataBit(GPIOB, K5)) {
+            delay_ms(200);
+        }
+    }
+    return;
+}
